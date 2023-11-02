@@ -1,4 +1,4 @@
-// SERVER SIDE LOGIC
+// SERVER
 
 require("dotenv").config();
 const express = require("express");
@@ -19,10 +19,10 @@ const PORT = process.env.PORT || 5500;
 // Favicon
 app.use(favicon(path.join(__dirname, "public", "favicon.ico")));
 
-// MongoDB Connect
+// Connect to MongoDB
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
@@ -31,7 +31,7 @@ const connectDB = async () => {
 
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`Listening on Port ${PORT}`);
+    console.log(`Listening on port ${PORT}`);
   });
 });
 
@@ -46,8 +46,9 @@ const Post = mongoose.model(
     timestamp: String,
   })
 );
+
 const User = mongoose.model(
-  "Post",
+  "User",
   new mongoose.Schema({
     username: String,
     password: String,
@@ -71,23 +72,23 @@ const authenticateJWT = (req, res, next) => {
   if (token) {
     jwt.verify(token, jwtSecret, (err, user) => {
       if (err) {
-        console.log("JWT Verification Error", err.message);
+        console.error("JWT Verification Error", err.message);
         return res.sendStatus(403);
       }
       req.user = user;
       next();
     });
   } else {
-    console.log("Token is missing");
+    console.error("Token is missing");
     res.sendStatus(401);
   }
 };
 
-// User Registration
+// User registration
 app.post("/register", async (req, res) => {
   const { username, password, role } = req.body;
 
-  // Sanitize and validate user input
+  // Sanitze and validate user input
   const sanitizedUsername = validator.escape(username);
   const sanitizedPassword = validator.escape(password);
 
@@ -96,11 +97,11 @@ app.post("/register", async (req, res) => {
     return res.status(400).send({ error: "Invalid input data" });
   }
 
-  const hashedPassword = await bcrypt.hash(sanitizaedPassword, 10);
+  const hashedPassword = await bcrypt.hash(sanitizedPassword, 10);
 
   const newUser = new User({
     username: sanitizedUsername,
-    password: sanitizedPassword,
+    password: hashedPassword,
     role,
   });
 
@@ -108,11 +109,11 @@ app.post("/register", async (req, res) => {
   res.status(201).send({ success: true });
 });
 
-// User Login
+// User login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  // Sanitize and validate user input
+  // Sanitze and validate user input
   const sanitizedUsername = validator.escape(username);
   const sanitizedPassword = validator.escape(password);
 
@@ -126,10 +127,7 @@ app.post("/login", async (req, res) => {
   if (user) {
     if (bcrypt.compare(password, user.password)) {
       const accessToken = jwt.sign(
-        {
-          username: user.username,
-          role: user.role,
-        },
+        { username: user.username, role: user.role },
         process.env.JWT_SECRET,
         {
           expiresIn: "24h",
@@ -170,28 +168,28 @@ app.post("/posts", authenticateJWT, async (req, res) => {
         res.status(201).send(savedPost);
       })
       .catch((error) => {
-        res.status(500).send({ error: "Internal Server Error " });
+        res.status(500).send({ error: "Internal Server Error" });
       });
   } else {
     res.sendStatus(403);
   }
 });
 
-app.get("/post:id", async (req, res) => {
+app.get("/post/:id", async (req, res) => {
   const postId = req.params.id;
   const post = await Post.findById(postId);
   if (!post) {
     return res.status(404).send("Post not found");
   }
 
-  // Read the HTML Template from the file
+  // Read the HTML template from the file
   fs.readFile(path.join(__dirname, "post-detail.html"), "utf8", (err, data) => {
     if (err) {
-      console.log(err);
+      console.error(err);
       return res.status(500).send("Internal Server Error");
     }
 
-    // Replace placeholders in the HTML with actual post data
+    // Replace placeholders in th HTML with actual post data
     const postDetailHtml = data
       .replace(/\${post.imageUrl}/g, post.imageUrl)
       .replace(/\${post.title}/g, post.title)
@@ -203,12 +201,12 @@ app.get("/post:id", async (req, res) => {
   });
 });
 
-// Delete Post
-app.delete("/posts:id", authenticateJWT, async (req, res) => {
-  if (req.user.role === "admin") {
+// Delete post
+app.delete("/posts/:id", authenticateJWT, async (req, res) => {
+  if (req.user.role == "admin") {
     try {
       await Post.findByIdAndDelete(req.params.id);
-      res.status(200).send({ message: "Post deleted." });
+      res.status(200).send({ message: "Post deleted" });
     } catch (error) {
       res.status(500).send({ error: "Internal Server Error" });
     }
@@ -218,7 +216,7 @@ app.delete("/posts:id", authenticateJWT, async (req, res) => {
 });
 
 // Update Post
-app.put("/posts:id", authenticateJWT, async (req, res) => {
+app.put("/posts/:id", authenticateJWT, async (req, res) => {
   const { title, content } = req.body;
   const postId = req.params.id;
 
@@ -238,6 +236,6 @@ app.put("/posts:id", authenticateJWT, async (req, res) => {
       res.status(403).send({ error: "Forbidden" });
     }
   } catch (error) {
-    res.status(500).send({ error: "Internal Server Error " });
+    res.status(500).send({ error: "Internal Server Error" });
   }
 });
